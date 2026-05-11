@@ -19,6 +19,10 @@ type Client struct {
 
 const defaultKeyPrefix = "v1:"
 
+func NewClient(rdb *redis.Client, keyPrefix string) *Client {
+	return &Client{rdb: rdb, keyPrefix: keyPrefix}
+}
+
 func NewFromEnv(cfg *config.RedisConfig) (*Client, error) {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     cfg.Host + ":" + strconv.Itoa(cfg.Port),

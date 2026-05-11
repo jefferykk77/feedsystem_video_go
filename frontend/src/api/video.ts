@@ -28,3 +28,41 @@ export async function listByAuthorId(authorId: number) {
 export function getDetail(id: number) {
   return postJson<Video>('/video/getDetail', { id })
 }
+
+// --- Chunk Upload API ---
+
+export type InitChunkUploadResponse = {
+  upload_id: string
+  uploaded_chunks: number[]
+}
+
+export function initChunkUpload(input: {
+  filename: string
+  file_size: number
+  chunk_size: number
+  total_chunks: number
+  file_hash: string
+}) {
+  return postJson<InitChunkUploadResponse>('/video/chunk/init', input, { authRequired: true })
+}
+
+export function uploadChunk(uploadId: string, chunkIndex: number, chunkHash: string, blob: Blob) {
+  const fd = new FormData()
+  fd.append('upload_id', uploadId)
+  fd.append('chunk_index', String(chunkIndex))
+  fd.append('chunk_hash', chunkHash)
+  fd.append('file', blob)
+  return postForm<{ chunk_index: number }>('/video/chunk/upload', fd, { authRequired: true })
+}
+
+export function chunkStatus(uploadId: string) {
+  return postJson<{ upload_id: string; uploaded_chunks: number[]; total_chunks: number }>(
+    '/video/chunk/status',
+    { upload_id: uploadId },
+    { authRequired: true },
+  )
+}
+
+export function completeChunkUpload(uploadId: string) {
+  return postJson<UploadResponse>('/video/chunk/complete', { upload_id: uploadId }, { authRequired: true })
+}

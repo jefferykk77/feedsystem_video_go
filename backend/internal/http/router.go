@@ -62,6 +62,7 @@ func SetRouter(db *gorm.DB, cache *rediscache.Client, rmq *rabbitmq.RabbitMQ) *g
 	}
 	videoService := video.NewVideoService(videoRepository, cache, popularityMQ)
 	videoHandler := video.NewVideoHandler(videoService, accountService)
+	chunkHandler := video.NewChunkUploadHandler(cache)
 	videoGroup := r.Group("/video")
 	{
 		videoGroup.POST("/listByAuthorID", videoHandler.ListByAuthorID)
@@ -73,6 +74,10 @@ func SetRouter(db *gorm.DB, cache *rediscache.Client, rmq *rabbitmq.RabbitMQ) *g
 		protectedVideoGroup.POST("/uploadVideo", videoHandler.UploadVideo)
 		protectedVideoGroup.POST("/uploadCover", videoHandler.UploadCover)
 		protectedVideoGroup.POST("/publish", videoHandler.PublishVideo)
+		protectedVideoGroup.POST("/chunk/init", chunkHandler.InitChunkUpload)
+		protectedVideoGroup.POST("/chunk/upload", chunkHandler.UploadChunk)
+		protectedVideoGroup.POST("/chunk/status", chunkHandler.ChunkStatus)
+		protectedVideoGroup.POST("/chunk/complete", chunkHandler.CompleteChunkUpload)
 	}
 	// like
 	likeMQ, err := rabbitmq.NewLikeMQ(rmq)

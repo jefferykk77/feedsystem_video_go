@@ -8,6 +8,7 @@ import * as videoApi from '../api/video'
 import type { Video } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
+import SparkMD5 from 'spark-md5'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -30,6 +31,13 @@ const publishForm = reactive({
 const preview = reactive({
   videoUrl: '',
   coverUrl: '',
+})
+
+// chunk upload progress
+const uploadProgress = reactive({
+  uploadedBytes: 0,
+  totalBytes: 0,
+  percent: 0,
 })
 
 function setPreviewVideo(file: File | null) {
@@ -85,6 +93,132 @@ function clearCover() {
   if (coverInput.value) coverInput.value.value = ''
 }
 
+function resetProgress() {
+  uploadProgress.uploadedBytes = 0
+  uploadProgress.totalBytes = 0
+  uploadProgress.percent = 0
+}
+
+// Compute file md5 by reading in 2MB chunks
+async function computeFileMD5(file: File): Promise<string> {
+  const chunkSize = 2 << 20
+  const spark = new SparkMD5.ArrayBuffer()
+  for (let offset = 0; offset < file.size; offset += chunkSize) {
+    const end = Math.min(offset + chunkSize, file.size)
+    const buf = await file.slice(offset, end).arrayBuffer()
+    spark.append(buf)
+  }
+  return spark.end()
+}
+
+// Compute md5 for a single chunk blob
+async function computeChunkMD5(blob: Blob): Promise<string> {
+  const buf = await blob.arrayBuffer()
+  const spark = new SparkMD5.ArrayBuffer()
+  spark.append(buf)
+  return spark.end()
+}
+
+const CHUNK_SIZE = 5 << 20 // 5 MB
+const MAX_CONCURRENT = 3
+const MAX_RETRIES = 3
+
+async function uploadVideoChunked(file: File): Promise<videoApi.UploadResponse> {
+  const totalChunks = Math.ceil(file.size / CHUNK_SIZE)
+  const fileHash = await computeFileMD5(file)
+
+  stage.value = '初始化上传'
+  const initRes = await videoApi.initChunkUpload({
+    filename: file.name,
+    file_size: file.size,
+    chunk_size: CHUNK_SIZE,
+    total_chunks: totalChunks,
+    file_hash: fileHash,
+  })
+
+  const uploadId = initRes.upload_id
+  const uploadedSet = new Set(initRes.uploaded_chunks)
+
+  uploadProgress.totalBytes = file.size
+  uploadProgress.uploadedBytes = uploadedSet.size * CHUNK_SIZE
+  // Last chunk might be smaller
+  if (uploadedSet.has(totalChunks - 1)) {
+    uploadProgress.uploadedBytes -= CHUNK_SIZE
+    uploadProgress.uploadedBytes += file.size - (totalChunks - 1) * CHUNK_SIZE
+  }
+  uploadProgress.percent = uploadProgress.totalBytes > 0
+    ? Math.round((uploadProgress.uploadedBytes / uploadProgress.totalBytes) * 100)
+    : 0
+
+  // Build list of chunks that still need uploading
+  const pending: number[] = []
+  for (let i = 0; i < totalChunks; i++) {
+    if (!uploadedSet.has(i)) {
+      pending.push(i)
+    }
+  }
+
+  if (pending.length === 0) {
+    stage.value = '合并文件'
+    return videoApi.completeChunkUpload(uploadId)
+  }
+
+  stage.value = '上传视频'
+
+  // Upload chunks with concurrency limit
+  let idx = 0
+  const advanceProgress = (chunkIndex: number) => {
+    const chunkBytes = chunkIndex === totalChunks - 1
+      ? file.size - chunkIndex * CHUNK_SIZE
+      : CHUNK_SIZE
+    uploadProgress.uploadedBytes += chunkBytes
+    uploadProgress.percent = Math.round((uploadProgress.uploadedBytes / uploadProgress.totalBytes) * 100)
+  }
+
+  const uploadOne = async (chunkIndex: number): Promise<void> => {
+    const start = chunkIndex * CHUNK_SIZE
+    const end = Math.min(start + CHUNK_SIZE, file.size)
+    const blob = file.slice(start, end)
+    const chunkHash = await computeChunkMD5(blob)
+
+    let lastErr: unknown
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        await videoApi.uploadChunk(uploadId, chunkIndex, chunkHash, blob)
+        advanceProgress(chunkIndex)
+        return
+      } catch (e) {
+        lastErr = e
+      }
+    }
+    throw lastErr
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    let active = 0
+    let done = false
+
+    const next = () => {
+      if (done) return
+      if (idx >= pending.length && active === 0) {
+        resolve()
+        return
+      }
+      while (active < MAX_CONCURRENT && idx < pending.length) {
+        const ci = pending[idx++] as number
+        active++
+        uploadOne(ci)
+          .then(() => { active--; next() })
+          .catch((e) => { done = true; reject(e) })
+      }
+    }
+    next()
+  })
+
+  stage.value = '合并文件'
+  return videoApi.completeChunkUpload(uploadId)
+}
+
 async function onPublish() {
   if (busy.value) return
   if (!auth.isLoggedIn) {
@@ -111,12 +245,12 @@ async function onPublish() {
   busy.value = true
   stage.value = ''
   published.value = null
+  resetProgress()
   try {
+    const videoRes = await uploadVideoChunked(publishForm.video!)
+
     stage.value = '上传封面'
     const coverRes = await videoApi.uploadCover(publishForm.cover!)
-
-    stage.value = '上传视频'
-    const videoRes = await videoApi.uploadVideo(publishForm.video!)
 
     const coverUrl = coverRes.url || coverRes.cover_url || ''
     const playUrl = videoRes.url || videoRes.play_url || ''
@@ -141,6 +275,7 @@ async function onPublish() {
   } finally {
     busy.value = false
     stage.value = ''
+    resetProgress()
   }
 }
 </script>
@@ -200,14 +335,26 @@ async function onPublish() {
             </div>
           </div>
 
-          <div v-if="preview.coverUrl || preview.videoUrl" class="grid two">
-            <div v-if="preview.coverUrl" class="preview-card">
-              <div class="subtle">封面预览</div>
-              <img class="cover" :src="preview.coverUrl" alt="cover preview" />
+          <!-- Upload progress bar -->
+          <div v-if="busy && uploadProgress.totalBytes > 0" class="progress-wrap">
+            <div class="progress-bar">
+              <div class="progress-fill" :style="{ width: uploadProgress.percent + '%' }"></div>
             </div>
+            <div class="progress-text">
+              {{ (uploadProgress.uploadedBytes / 1024 / 1024).toFixed(1) }} MB /
+              {{ (uploadProgress.totalBytes / 1024 / 1024).toFixed(1) }} MB
+              ({{ uploadProgress.percent }}%)
+            </div>
+          </div>
+
+          <div v-if="preview.coverUrl || preview.videoUrl" class="grid two">
             <div v-if="preview.videoUrl" class="preview-card">
               <div class="subtle">视频预览</div>
               <video class="video" :src="preview.videoUrl" controls playsinline preload="metadata" />
+            </div>
+            <div v-if="preview.coverUrl" class="preview-card">
+              <div class="subtle">封面预览</div>
+              <img class="cover" :src="preview.coverUrl" alt="cover preview" />
             </div>
           </div>
 
@@ -342,5 +489,29 @@ async function onPublish() {
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(0, 0, 0, 0.35);
+}
+
+.progress-wrap {
+  display: grid;
+  gap: 6px;
+}
+
+.progress-bar {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #4a9eff;
+  border-radius: 4px;
+  transition: width 0.2s ease;
+}
+
+.progress-text {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
 }
 </style>
