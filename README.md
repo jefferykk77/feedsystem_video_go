@@ -77,17 +77,23 @@ npm install && npm run dev
 | POST | `/getDetail` | 否 | 视频详情（三级缓存） |
 
 ### 点赞 `/like`
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
 | POST | `/like` | JWT | 点赞 |
 | POST | `/unlike` | JWT | 取消点赞 |
 | POST | `/isLiked` | JWT | 是否已赞 |
 | POST | `/listMyLikedVideos` | JWT | 我赞过的视频 |
 
 ### 评论 `/comment`
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
 | POST | `/listAll` | 否 | 评论列表（分页200，按时间升序） |
 | POST | `/publish` | JWT | 发布评论（支持 @username 提及） |
 | POST | `/delete` | JWT | 删除评论 |
 
 ### 关注 `/social`
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
 | POST | `/follow` | JWT | 关注 |
 | POST | `/unfollow` | JWT | 取关 |
 | POST | `/getAllFollowers` | JWT | 粉丝列表（含粉丝数） |
@@ -95,6 +101,8 @@ npm install && npm run dev
 | POST | `/getCounts` | JWT | 粉丝/关注计数 |
 
 ### Feed `/feed`
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
 | POST | `/listLatest` | 软鉴权 | 最新视频（游标分页） |
 | POST | `/listLikesCount` | 软鉴权 | 点赞排行（复合游标） |
 | POST | `/listByPopularity` | 软鉴权 | 热度榜（快照分页） |
@@ -102,12 +110,16 @@ npm install && npm run dev
 | POST | `/listByTag` | 软鉴权 | 按 #话题 浏览 |
 
 ### 通知 `/notification`
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
 | GET | `/stream?token=` | 是 | SSE 实时推送 |
 | POST | `/list` | 是 | 通知列表 |
 | POST | `/markRead` | 是 | 标记已读（传 id 单条，不传全标） |
 | POST | `/unreadCount` | 是 | 未读计数 |
 
 ### 私信 `/message`
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
 | POST | `/send` | JWT | 发送私信 |
 | POST | `/list` | JWT | 对话列表 |
 
