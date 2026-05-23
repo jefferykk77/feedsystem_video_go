@@ -7,6 +7,7 @@ import (
 	"feedsystem_video_go/internal/middleware/rabbitmq"
 	"feedsystem_video_go/internal/social"
 	"log"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -57,18 +58,28 @@ func (w *SocialWorker) Run(ctx context.Context) error {
 }
 
 func (w *SocialWorker) handleDelivery(ctx context.Context, d amqp.Delivery) {
-	if err := w.process(ctx, d.Body); err != nil {
-		retryCount := rabbitmq.GetRetryCount(d)
-		if retryCount >= rabbitmq.MaxRetryCount {
-			log.Printf("social worker: max retries exceeded (%d), moving to DLX: %v", retryCount, err)
-			_ = d.Ack(false)
+	const maxRetries = 3
+	for i := 0; i <= maxRetries; i++ {
+		select {
+		case <-ctx.Done():
+			_ = d.Nack(false, true)
 			return
+		default:
 		}
-		log.Printf("social worker: failed (retry %d/%d): %v", retryCount+1, rabbitmq.MaxRetryCount, err)
-		_ = d.Nack(false, true)
+		if err := w.process(ctx, d.Body); err != nil {
+			if i >= maxRetries {
+				log.Printf("social worker: 重试 %d 次后仍失败, 丢弃: %v", maxRetries, err)
+				_ = d.Ack(false)
+				return
+			}
+			wait := time.Duration(1<<uint(i)) * time.Second
+			log.Printf("social worker: 处理失败, %v 后重试 (%d/%d): %v", wait, i+1, maxRetries, err)
+			time.Sleep(wait)
+			continue
+		}
+		_ = d.Ack(false)
 		return
 	}
-	_ = d.Ack(false)
 }
 
 func (w *SocialWorker) process(ctx context.Context, body []byte) error {

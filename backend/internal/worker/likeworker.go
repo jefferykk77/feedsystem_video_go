@@ -58,18 +58,28 @@ func (w *LikeWorker) Run(ctx context.Context) error {
 }
 
 func (w *LikeWorker) handleDelivery(ctx context.Context, d amqp.Delivery) {
-	if err := w.process(ctx, d.Body); err != nil {
-		retryCount := rabbitmq.GetRetryCount(d)
-		if retryCount >= rabbitmq.MaxRetryCount {
-			log.Printf("like worker: max retries exceeded (%d), moving to DLX: %v", retryCount, err)
-			_ = d.Ack(false)
+	const maxRetries = 3
+	for i := 0; i <= maxRetries; i++ {
+		select {
+		case <-ctx.Done():
+			_ = d.Nack(false, true)
 			return
+		default:
 		}
-		log.Printf("like worker: failed (retry %d/%d): %v", retryCount+1, rabbitmq.MaxRetryCount, err)
-		_ = d.Nack(false, true)
+		if err := w.process(ctx, d.Body); err != nil {
+			if i >= maxRetries {
+				log.Printf("like worker: 重试 %d 次后仍失败, 丢弃: %v", maxRetries, err)
+				_ = d.Ack(false)
+				return
+			}
+			wait := time.Duration(1<<uint(i)) * time.Second
+			log.Printf("like worker: 处理失败, %v 后重试 (%d/%d): %v", wait, i+1, maxRetries, err)
+			time.Sleep(wait)
+			continue
+		}
+		_ = d.Ack(false)
 		return
 	}
-	_ = d.Ack(false)
 }
 
 func (w *LikeWorker) process(ctx context.Context, body []byte) error {

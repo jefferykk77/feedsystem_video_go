@@ -55,6 +55,38 @@ func connectWithRetry(name string, maxRetries int, fn func() error) {
 	log.Fatalf("%s: 超过最大重试次数", name)
 }
 
+// runWorkerWithRetry 为每个 Worker 创建独立 Channel，断开后自动重连
+func runWorkerWithRetry(ctx context.Context, name string, conn *amqp.Connection, fn func(*amqp.Channel) error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		ch, err := conn.Channel()
+		if err != nil {
+			log.Printf("%s: 创建 Channel 失败: %v, 5秒后重试", name, err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		if err := ch.Qos(50, 0, false); err != nil {
+			log.Printf("%s: QoS 设置失败: %v", name, err)
+		}
+
+		log.Printf("%s started, consuming", name)
+		if err := fn(ch); err != nil {
+			if ctx.Err() != nil {
+				ch.Close()
+				return
+			}
+			log.Printf("%s: %v, 5秒后重连...", name, err)
+		}
+		ch.Close()
+		time.Sleep(5 * time.Second)
+	}
+}
+
 func main() {
 	// 加载 .env（本地开发）
 	if err := godotenv.Load(); err != nil {
@@ -110,42 +142,33 @@ func main() {
 		return err
 	})
 	defer conn.Close()
-	// 创建 RabbitMQ 通道
-	ch, err := conn.Channel()
+
+	// 用临时 Channel 声明拓扑（持久化队列，声明一次即可）
+	topoCh, err := conn.Channel()
 	if err != nil {
-		log.Fatalf("Failed to open rabbitmq channel: %v", err)
+		log.Fatalf("Failed to open topology channel: %v", err)
 	}
-	defer ch.Close()
-	// 声明 Social 交换机和队列
-	if err := declareSocialTopology(ch); err != nil {
+	if err := declareSocialTopology(topoCh); err != nil {
 		log.Fatalf("Failed to declare social topology: %v", err)
 	}
-	if err := declareLikeTopology(ch); err != nil {
+	if err := declareLikeTopology(topoCh); err != nil {
 		log.Fatalf("Failed to declare like topology: %v", err)
 	}
-	if err := declareCommentTopology(ch); err != nil {
+	if err := declareCommentTopology(topoCh); err != nil {
 		log.Fatalf("Failed to declare comment topology: %v", err)
 	}
 	if cache != nil {
-		if err := declarePopularityTopology(ch); err != nil {
+		if err := declarePopularityTopology(topoCh); err != nil {
 			log.Fatalf("Failed to declare popularity topology: %v", err)
 		}
 	}
-	if err := ch.Qos(50, 0, false); err != nil {
-		log.Fatalf("Failed to set qos: %v", err)
-	}
+	topoCh.Close()
 
-	repo := social.NewSocialRepository(sqlDB)
-	socialWorker := worker.NewSocialWorker(ch, repo, socialQueue)
+	// 准备 repo
+	socialRepo := social.NewSocialRepository(sqlDB)
 	videoRepo := video.NewVideoRepository(sqlDB)
 	likeRepo := video.NewLikeRepository(sqlDB)
 	commentRepo := video.NewCommentRepository(sqlDB)
-	likeWorker := worker.NewLikeWorker(ch, likeRepo, videoRepo, likeQueue)
-	commentWorker := worker.NewCommentWorker(ch, commentRepo, videoRepo, commentQueue)
-	var popularityWorker *worker.PopularityWorker
-	if cache != nil {
-		popularityWorker = worker.NewPopularityWorker(ch, cache, popularityQueue)
-	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -162,22 +185,26 @@ func main() {
 		defer pprofServer.Close()
 	}
 
-	errCh := make(chan error, 4)
-	log.Printf("Worker started, consuming queue=%s", socialQueue)
-	go func() { errCh <- socialWorker.Run(ctx) }()
-	log.Printf("Worker started, consuming queue=%s", likeQueue)
-	go func() { errCh <- likeWorker.Run(ctx) }()
-	log.Printf("Worker started, consuming queue=%s", commentQueue)
-	go func() { errCh <- commentWorker.Run(ctx) }()
-	if popularityWorker != nil {
-		log.Printf("Worker started, consuming queue=%s", popularityQueue)
-		go func() { errCh <- popularityWorker.Run(ctx) }()
+	// 每个 Worker 独立 Channel + 自动重连
+	go runWorkerWithRetry(ctx, "SocialWorker", conn, func(ch *amqp.Channel) error {
+		return worker.NewSocialWorker(ch, socialRepo, socialQueue).Run(ctx)
+	})
+	go runWorkerWithRetry(ctx, "LikeWorker", conn, func(ch *amqp.Channel) error {
+		return worker.NewLikeWorker(ch, likeRepo, videoRepo, likeQueue).Run(ctx)
+	})
+	go runWorkerWithRetry(ctx, "CommentWorker", conn, func(ch *amqp.Channel) error {
+		return worker.NewCommentWorker(ch, commentRepo, videoRepo, commentQueue).Run(ctx)
+	})
+	if cache != nil {
+		go runWorkerWithRetry(ctx, "PopularityWorker", conn, func(ch *amqp.Channel) error {
+			return worker.NewPopularityWorker(ch, cache, popularityQueue).Run(ctx)
+		})
 	}
 
-	err = <-errCh
-	if err != nil && err != context.Canceled {
-		log.Fatalf("Worker stopped: %v", err)
-	}
+	// 等待退出信号
+	<-ctx.Done()
+	log.Printf("Worker shutting down...")
+	time.Sleep(2 * time.Second) // 等待正在处理的消息完成
 	log.Printf("Worker stopped")
 }
 

@@ -66,18 +66,28 @@ func (w *NotificationWorker) Run(ctx context.Context) error {
 }
 
 func (w *NotificationWorker) handleDelivery(ctx context.Context, d amqp.Delivery) {
-	retryCount := rabbitmq.GetRetryCount(d)
-	if err := w.process(ctx, d); err != nil {
-		if retryCount >= rabbitmq.MaxRetryCount {
-			log.Printf("notification worker: max retries, dropping: %v", err)
-			_ = d.Ack(false)
+	const maxRetries = 3
+	for i := 0; i <= maxRetries; i++ {
+		select {
+		case <-ctx.Done():
+			_ = d.Nack(false, true)
 			return
+		default:
 		}
-		log.Printf("notification worker: failed (retry %d/%d): %v", retryCount+1, rabbitmq.MaxRetryCount, err)
-		_ = d.Nack(false, true)
+		if err := w.process(ctx, d); err != nil {
+			if i >= maxRetries {
+				log.Printf("notification worker: 重试 %d 次后仍失败, 丢弃: %v", maxRetries, err)
+				_ = d.Ack(false)
+				return
+			}
+			wait := time.Duration(1<<uint(i)) * time.Second
+			log.Printf("notification worker: 处理失败, %v 后重试 (%d/%d): %v", wait, i+1, maxRetries, err)
+			time.Sleep(wait)
+			continue
+		}
+		_ = d.Ack(false)
 		return
 	}
-	_ = d.Ack(false)
 }
 
 func (w *NotificationWorker) process(ctx context.Context, d amqp.Delivery) error {
