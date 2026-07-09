@@ -29,6 +29,8 @@ type CachedFeedData struct {
 	PublicVideos []video.Video `json:"public_videos"`
 }
 
+const popularitySnapshotTTL = 30 * time.Minute
+
 func NewFeedService(repo *FeedRepository, likeRepo *video.LikeRepository, rediscache *rediscache.Client) *FeedService {
 	return &FeedService{repo: repo, likeRepo: likeRepo, rediscache: rediscache, localcache: cache.New(3*time.Second, 5*time.Second), cacheTTL: 24 * time.Hour}
 }
@@ -146,16 +148,19 @@ func (f *FeedService) GetVideoByIDs(ctx context.Context, videoIDs []uint) ([]*vi
 }
 
 // 查询最新视频 (冷热分离 + 游标分页)
-func (f *FeedService) ListLatest(ctx context.Context, limit int, latestBefore time.Time, viewerAccountID uint) (ListLatestResponse, error) {
+func (f *FeedService) ListLatest(ctx context.Context, limit int, latestBefore time.Time, latestIDBefore uint, viewerAccountID uint) (ListLatestResponse, error) {
+	if latestIDBefore > 0 {
+		return f.listLatestFromDB(ctx, limit, latestBefore, latestIDBefore, viewerAccountID)
+	}
 	if f.rediscache == nil {
-		return f.listLatestFromDB(ctx, limit, latestBefore, viewerAccountID)
+		return f.listLatestFromDB(ctx, limit, latestBefore, 0, viewerAccountID)
 	}
 
 	// 获取 ZSET 中最老的一条数据
 	zsetTail, err := f.rediscache.ZRangeWithScores(ctx, f.rediscache.Key("feed:global_timeline"), 0, 0)
 
 	if err != nil {
-		return f.listLatestFromDB(ctx, limit, latestBefore, viewerAccountID)
+		return f.listLatestFromDB(ctx, limit, latestBefore, 0, viewerAccountID)
 	}
 
 	isZsetEmpty := len(zsetTail) == 0
@@ -166,7 +171,7 @@ func (f *FeedService) ListLatest(ctx context.Context, limit int, latestBefore ti
 
 		v, err, _ := f.requestGroup.Do(sfKey, func() (interface{}, error) {
 			// 无视游标，直接去 MySQL 捞最新的 1000 条
-			dbVideos, err := f.repo.ListLatest(ctx, 1000, time.Time{})
+			dbVideos, err := f.repo.ListLatest(ctx, 1000, time.Time{}, 0)
 			if err != nil {
 				return nil, err
 			}
@@ -196,7 +201,7 @@ func (f *FeedService) ListLatest(ctx context.Context, limit int, latestBefore ti
 		}
 
 		// 让所有被阻塞的请求重新查一遍
-		return f.ListLatest(ctx, limit, latestBefore, viewerAccountID)
+		return f.ListLatest(ctx, limit, latestBefore, latestIDBefore, viewerAccountID)
 	}
 
 	watermark := int64(zsetTail[0].Score)
@@ -213,7 +218,7 @@ func (f *FeedService) ListLatest(ctx context.Context, limit int, latestBefore ti
 		// 针对个别用户的防并发（此时可以用时间戳做锁，因为冷尾流量极小）
 		sfKey := f.rediscache.Key("sf:cold:listLatest:%d:%d", limit, reqTime)
 		v, err, _ := f.requestGroup.Do(sfKey, func() (interface{}, error) {
-			return f.repo.ListLatest(ctx, limit, latestBefore)
+			return f.repo.ListLatest(ctx, limit, latestBefore, 0)
 		})
 		if err != nil {
 			return ListLatestResponse{}, err
@@ -260,7 +265,7 @@ func (f *FeedService) ListLatest(ctx context.Context, limit int, latestBefore ti
 
 			sfKey := f.rediscache.Key("sf:stitch:listLatest:%d:%d", remainLimit, coldCursor.UnixMilli())
 			v, err, _ := f.requestGroup.Do(sfKey, func() (interface{}, error) {
-				return f.repo.ListLatest(ctx, remainLimit, coldCursor)
+				return f.repo.ListLatest(ctx, remainLimit, coldCursor, 0)
 			})
 
 			if err == nil {
@@ -271,9 +276,13 @@ func (f *FeedService) ListLatest(ctx context.Context, limit int, latestBefore ti
 	}
 
 	var nextTime int64
+	var nextIDBefore *uint
 	if len(baseVideos) > 0 {
 		// 将本页最后一条视频的时间作为下一次请求的游标
-		nextTime = baseVideos[len(baseVideos)-1].CreateTime.UnixMilli()
+		last := baseVideos[len(baseVideos)-1]
+		nextTime = last.CreateTime.UnixMilli()
+		nextID := last.ID
+		nextIDBefore = &nextID
 	}
 	hasMore := len(baseVideos) == limit
 
@@ -283,14 +292,15 @@ func (f *FeedService) ListLatest(ctx context.Context, limit int, latestBefore ti
 	}
 
 	return ListLatestResponse{
-		VideoList: feedVideos,
-		NextTime:  nextTime,
-		HasMore:   hasMore,
+		VideoList:    feedVideos,
+		NextTime:     nextTime,
+		NextIDBefore: nextIDBefore,
+		HasMore:      hasMore,
 	}, nil
 }
 
-func (f *FeedService) listLatestFromDB(ctx context.Context, limit int, latestBefore time.Time, viewerAccountID uint) (ListLatestResponse, error) {
-	videos, err := f.repo.ListLatest(ctx, limit, latestBefore)
+func (f *FeedService) listLatestFromDB(ctx context.Context, limit int, latestBefore time.Time, latestIDBefore uint, viewerAccountID uint) (ListLatestResponse, error) {
+	videos, err := f.repo.ListLatest(ctx, limit, latestBefore, latestIDBefore)
 	if err != nil {
 		return ListLatestResponse{}, err
 	}
@@ -299,13 +309,18 @@ func (f *FeedService) listLatestFromDB(ctx context.Context, limit int, latestBef
 		return ListLatestResponse{}, err
 	}
 	var nextTime int64
+	var nextIDBefore *uint
 	if len(videos) > 0 {
-		nextTime = videos[len(videos)-1].CreateTime.UnixMilli()
+		last := videos[len(videos)-1]
+		nextTime = last.CreateTime.UnixMilli()
+		nextID := last.ID
+		nextIDBefore = &nextID
 	}
 	return ListLatestResponse{
-		VideoList: feedVideos,
-		NextTime:  nextTime,
-		HasMore:   len(videos) == limit,
+		VideoList:    feedVideos,
+		NextTime:     nextTime,
+		NextIDBefore: nextIDBefore,
+		HasMore:      len(videos) == limit,
 	}, nil
 }
 
@@ -425,63 +440,47 @@ func (f *FeedService) ListByFollowing(ctx context.Context, limit int, latestBefo
 }
 
 func (f *FeedService) ListByPopularity(ctx context.Context, limit int, reqAsOf int64, offset int, viewerAccountID uint, latestPopularity int64, latestBefore time.Time, latestIDBefore uint) (ListByPopularityResponse, error) {
-	// Redis 热榜（稳定分页：as_of + offset）
 	if f.rediscache != nil {
 		asOf := time.Now().UTC().Truncate(time.Minute)
 		if reqAsOf > 0 {
 			asOf = time.Unix(reqAsOf, 0).UTC().Truncate(time.Minute)
 		}
 
-		const win = 60
-		keys := make([]string, 0, win)
-		for i := 0; i < win; i++ {
-			keys = append(keys, f.rediscache.Key("hot:video:1m:%s", asOf.Add(-time.Duration(i)*time.Minute).Format("200601021504")))
-		}
-
-		dest := f.rediscache.Key("hot:video:merge:1m:%s", asOf.Format("200601021504")) // 快照key：同一个as_of页内复用
+		dest := f.popularitySnapshotKey(viewerAccountID, asOf)
 		opCtx, cancel := context.WithTimeout(ctx, 80*time.Millisecond)
 		defer cancel()
 
 		exists, _ := f.rediscache.Exists(opCtx, dest)
-		if !exists {
-			_ = f.rediscache.ZUnionStore(opCtx, dest, keys, "SUM")
-			_ = f.rediscache.Expire(opCtx, dest, 2*time.Minute) // 给翻页留时间
+		if offset <= 0 || reqAsOf <= 0 {
+			keys := f.popularityWindowKeys(asOf)
+			sfKey := f.rediscache.Key("sf:hot:snapshot:%s", dest)
+			_, err, _ := f.requestGroup.Do(sfKey, func() (interface{}, error) {
+				if err := f.rediscache.ZUnionStore(opCtx, dest, keys, "SUM"); err != nil {
+					return nil, err
+				}
+				_ = f.rediscache.Expire(opCtx, dest, popularitySnapshotTTL)
+				return nil, nil
+			})
+			exists = err == nil
+		} else if exists {
+			_ = f.rediscache.Expire(opCtx, dest, popularitySnapshotTTL)
 		}
 
 		start := int64(offset)
 		stop := start + int64(limit) - 1
 		members, err := f.rediscache.ZRevRange(opCtx, dest, start, stop)
-		if err == nil && len(members) == 0 {
-			if offset > 0 {
-				return ListByPopularityResponse{
-					VideoList:  []FeedVideoItem{},
-					AsOf:       asOf.Unix(),
-					NextOffset: offset,
-					HasMore:    false,
-				}, nil
-			}
+		if err == nil && len(members) == 0 && offset > 0 {
+			return ListByPopularityResponse{
+				VideoList:  []FeedVideoItem{},
+				AsOf:       asOf.Unix(),
+				NextOffset: offset,
+				HasMore:    false,
+			}, nil
 		}
 		if err == nil && len(members) > 0 {
-			ids := make([]uint, 0, len(members))
-			for _, m := range members {
-				u, err := strconv.ParseUint(m, 10, 64)
-				if err == nil && u > 0 {
-					ids = append(ids, uint(u))
-				}
-			}
-
-			videos, err := f.repo.GetByIDs(ctx, ids)
+			ids := parseUintMembers(members)
+			ordered, err := f.GetVideoByIDs(ctx, ids)
 			if err == nil {
-				byID := make(map[uint]*video.Video, len(videos))
-				for _, v := range videos {
-					byID[v.ID] = v
-				}
-				ordered := make([]*video.Video, 0, len(ids))
-				for _, id := range ids {
-					if v := byID[id]; v != nil {
-						ordered = append(ordered, v)
-					}
-				}
 				items, err := f.buildFeedVideos(ctx, ordered, viewerAccountID)
 				if err != nil {
 					return ListByPopularityResponse{}, err
@@ -530,6 +529,33 @@ func (f *FeedService) ListByPopularity(ctx context.Context, limit int, reqAsOf i
 		resp.NextLatestIDBefore = &nextID
 	}
 	return resp, nil
+}
+
+func (f *FeedService) popularitySnapshotKey(viewerAccountID uint, asOf time.Time) string {
+	if viewerAccountID == 0 {
+		return f.rediscache.Key("hot:video:snapshot:anon:%s", asOf.Format("200601021504"))
+	}
+	return f.rediscache.Key("hot:video:snapshot:user:%d:%s", viewerAccountID, asOf.Format("200601021504"))
+}
+
+func (f *FeedService) popularityWindowKeys(asOf time.Time) []string {
+	const win = 60
+	keys := make([]string, 0, win)
+	for i := 0; i < win; i++ {
+		keys = append(keys, f.rediscache.Key("hot:video:1m:%s", asOf.Add(-time.Duration(i)*time.Minute).Format("200601021504")))
+	}
+	return keys
+}
+
+func parseUintMembers(members []string) []uint {
+	ids := make([]uint, 0, len(members))
+	for _, m := range members {
+		u, err := strconv.ParseUint(m, 10, 64)
+		if err == nil && u > 0 {
+			ids = append(ids, uint(u))
+		}
+	}
+	return ids
 }
 
 func (f *FeedService) buildFeedVideos(ctx context.Context, videos []*video.Video, viewerAccountID uint) ([]FeedVideoItem, error) {

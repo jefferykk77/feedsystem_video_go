@@ -1,5 +1,32 @@
 # feedsystem_video_go
 
+## 本次修改解决的问题
+
+### 1. Feed 继续翻页时避免重复视频
+
+原先最新流只用 `latest_time` 做游标，如果多条视频拥有相同 `create_time`，继续翻页时可能因为排序不稳定导致重复或漏数据。本次把最新流分页改成 `create_time + id` 复合游标：
+
+- 请求增加 `latest_id_before`。
+- 响应增加 `next_id_before`。
+- 数据库排序改为 `create_time DESC, id DESC`。
+- 下一页查询使用 `(create_time < ?) OR (create_time = ? AND id < ?)`。
+
+这样即使多条视频时间相同，也能稳定地从上一页最后一条之后继续翻。
+
+### 2. 热榜快照 TTL 过期后避免翻到重复内容
+
+原先热榜使用分钟级全局快照，TTL 较短。用户已经翻了前两页后，如果快照过期，再翻第三页时可能重新合并一份新的热榜；新热榜的排序和内容已经变化，就可能把之前看过的视频再次翻出来。
+
+本次调整为按用户和 `as_of` 生成轻量快照 key，并在用户继续翻页时续期：
+
+- 快照 key 从全局分钟 key 改成 `hot:video:snapshot:user:{user_id}:{as_of}`。
+- 匿名用户使用 `hot:video:snapshot:anon:{as_of}`。
+- 首次请求或刷新时生成新快照。
+- 继续翻页时读取同一份快照，并把 TTL 续到 30 分钟。
+- 快照里只保存视频 ID 排序索引，不复制完整视频详情。
+
+这样“下拉刷新”和“继续翻页”的语义分开：刷新可以生成新快照，继续翻页必须沿用旧快照。
+
 基于 Go + Vue 3 的短视频 Feed 系统，含账号、视频、点赞、评论、关注、Feed 流、私信、通知，支持 Redis 缓存、RabbitMQ 异步 Worker、分片上传、SSE 实时推送、Docker Compose 部署。
 
 ## 更完整的视频 Feed 流系统项目

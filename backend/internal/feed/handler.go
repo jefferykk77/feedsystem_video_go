@@ -29,11 +29,19 @@ func (f *FeedHandler) ListLatest(c *gin.Context) {
 	if req.LatestTime > 0 {
 		latestTime = time.UnixMilli(req.LatestTime)
 	}
+	var latestIDBefore uint
+	if req.LatestIDBefore != nil {
+		if req.LatestTime <= 0 || *req.LatestIDBefore == 0 {
+			c.JSON(400, gin.H{"error": "latest_time and latest_id_before must be provided together"})
+			return
+		}
+		latestIDBefore = *req.LatestIDBefore
+	}
 	viewerAccountID, err := jwt.GetAccountID(c)
 	if err != nil {
 		viewerAccountID = 0
 	}
-	feedItems, err := f.service.ListLatest(c.Request.Context(), req.Limit, latestTime, viewerAccountID)
+	feedItems, err := f.service.ListLatest(c.Request.Context(), req.Limit, latestTime, latestIDBefore, viewerAccountID)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
