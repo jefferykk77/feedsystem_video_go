@@ -236,7 +236,7 @@ func (h *ChunkUploadHandler) ChunkStatus(c *gin.Context) {
 	}
 
 	var req ChunkStatusRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

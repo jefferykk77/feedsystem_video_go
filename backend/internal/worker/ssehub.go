@@ -205,9 +205,9 @@ func (h *SSEHub) UnreadCountHandler(c *gin.Context) {
 
 func (h *SSEHub) RegisterRoutes(r *gin.Engine, group *gin.RouterGroup) {
 	group.GET("/stream", h.SSEHandler)
-	group.POST("/list", h.ListHandler)
+	group.GET("/list", h.ListHandler)
 	group.POST("/markRead", h.MarkReadHandler)
-	group.POST("/unreadCount", h.UnreadCountHandler)
+	group.GET("/unreadCount", h.UnreadCountHandler)
 }
 
 var _ NotificationHub = (*SSEHub)(nil)

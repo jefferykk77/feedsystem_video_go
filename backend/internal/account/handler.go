@@ -87,7 +87,7 @@ func (h *AccountHandler) ChangePassword(c *gin.Context) {
 
 func (h *AccountHandler) FindByID(c *gin.Context) {
 	var req FindByIDRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(apierror.ClassifyHTTPStatus(err), gin.H{"error": err.Error()})
 		return
 	}
@@ -101,7 +101,7 @@ func (h *AccountHandler) FindByID(c *gin.Context) {
 
 func (h *AccountHandler) FindByUsername(c *gin.Context) {
 	var req FindByUsernameRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(apierror.ClassifyHTTPStatus(err), gin.H{"error": err.Error()})
 		return
 	}

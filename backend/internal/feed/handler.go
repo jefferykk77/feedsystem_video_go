@@ -18,7 +18,7 @@ func NewFeedHandler(service *FeedService) *FeedHandler {
 
 func (f *FeedHandler) ListLatest(c *gin.Context) {
 	var req ListLatestRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(apierror.ClassifyHTTPStatus(err), gin.H{"error": err.Error()})
 		return
 	}
@@ -44,7 +44,7 @@ func (f *FeedHandler) ListLatest(c *gin.Context) {
 
 func (f *FeedHandler) ListLikesCount(c *gin.Context) {
 	var req ListLikesCountRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(apierror.ClassifyHTTPStatus(err), gin.H{"error": err.Error()})
 		return
 	}
@@ -93,7 +93,7 @@ func (f *FeedHandler) ListLikesCount(c *gin.Context) {
 
 func (f *FeedHandler) ListByFollowing(c *gin.Context) {
 	var req ListByFollowingRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(apierror.ClassifyHTTPStatus(err), gin.H{"error": err.Error()})
 		return
 	}
@@ -119,7 +119,7 @@ func (f *FeedHandler) ListByFollowing(c *gin.Context) {
 
 func (f *FeedHandler) ListByPopularity(c *gin.Context) {
 	var req ListByPopularityRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(apierror.ClassifyHTTPStatus(err), gin.H{"error": err.Error()})
 		return
 	}
@@ -177,10 +177,10 @@ func nonNilFeedVideoItems(items []FeedVideoItem) []FeedVideoItem {
 
 func (h *FeedHandler) ListByTag(c *gin.Context) {
 	var req struct {
-		TagName string `json:"tag_name"`
-		Limit   int    `json:"limit"`
+		TagName string `json:"tag_name" form:"tag_name"`
+		Limit   int    `json:"limit" form:"limit"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}

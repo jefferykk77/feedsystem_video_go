@@ -20,7 +20,7 @@ type RenameRequest struct {
 }
 
 type FindByIDRequest struct {
-	ID uint `json:"id"`
+	ID uint `json:"id" form:"id"`
 }
 
 type FindByIDResponse struct {
@@ -31,7 +31,7 @@ type FindByIDResponse struct {
 }
 
 type FindByUsernameRequest struct {
-	Username string `json:"username"`
+	Username string `json:"username" form:"username"`
 }
 
 type FindByUsernameResponse struct {
@@ -67,7 +67,7 @@ type RefreshRequest struct {
 }
 
 type GetProfileRequest struct {
-	AccountID uint `json:"account_id"`
+	AccountID uint `json:"account_id" form:"account_id"`
 }
 
 type GetProfileResponse struct {

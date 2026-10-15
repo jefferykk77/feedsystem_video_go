@@ -17,7 +17,7 @@ type UnfollowRequest struct {
 }
 
 type GetAllFollowersRequest struct {
-	VloggerID uint `json:"vlogger_id"`
+	VloggerID uint `json:"vlogger_id" form:"vlogger_id"`
 }
 
 type GetAllFollowersResponse struct {
@@ -36,5 +36,5 @@ type SocialCounts struct {
 }
 
 type GetAllVloggersRequest struct {
-	FollowerID uint `json:"follower_id"`
+	FollowerID uint `json:"follower_id" form:"follower_id"`
 }

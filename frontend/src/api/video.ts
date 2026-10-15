@@ -1,4 +1,4 @@
-import { postForm, postJson } from './client'
+import { getQuery, postForm, postJson } from './client'
 import { normalizeVideoList } from './normalize'
 import type { Video } from './types'
 
@@ -21,12 +21,12 @@ export function uploadCover(file: File) {
 }
 
 export async function listByAuthorId(authorId: number) {
-  const videos = await postJson<Video[] | null>('/video/listByAuthorID', { author_id: authorId })
+  const videos = await getQuery<Video[] | null>('/video/listByAuthorID', { author_id: authorId })
   return normalizeVideoList(videos)
 }
 
 export function getDetail(id: number) {
-  return postJson<Video>('/video/getDetail', { id })
+  return getQuery<Video>('/video/getDetail', { id })
 }
 
 // --- Chunk Upload API ---
@@ -56,7 +56,7 @@ export function uploadChunk(uploadId: string, chunkIndex: number, chunkHash: str
 }
 
 export function chunkStatus(uploadId: string) {
-  return postJson<{ upload_id: string; uploaded_chunks: number[]; total_chunks: number }>(
+  return getQuery<{ upload_id: string; uploaded_chunks: number[]; total_chunks: number }>(
     '/video/chunk/status',
     { upload_id: uploadId },
     { authRequired: true },

@@ -47,7 +47,7 @@ type UploadChunkRequest struct {
 }
 
 type ChunkStatusRequest struct {
-	UploadID string `json:"upload_id" binding:"required"`
+	UploadID string `json:"upload_id" form:"upload_id" binding:"required"`
 }
 
 type CompleteChunkUploadRequest struct {

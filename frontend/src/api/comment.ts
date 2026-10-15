@@ -1,9 +1,9 @@
-import { postJson } from './client'
+import { getQuery, postJson } from './client'
 import { normalizeCommentList } from './normalize'
 import type { Comment, MessageResponse } from './types'
 
 export async function listAll(videoId: number) {
-  const comments = await postJson<Comment[] | null>('/comment/listAll', { video_id: videoId })
+  const comments = await getQuery<Comment[] | null>('/comment/listAll', { video_id: videoId })
   return normalizeCommentList(comments)
 }
 

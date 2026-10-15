@@ -1,4 +1,4 @@
-import { postJson } from './client'
+import { getQuery, postJson } from './client'
 import type { IsLikedResponse, MessageResponse, Video } from './types'
 
 export function like(videoId: number) {
@@ -10,9 +10,9 @@ export function unlike(videoId: number) {
 }
 
 export function isLiked(videoId: number) {
-  return postJson<IsLikedResponse>('/like/isLiked', { video_id: videoId }, { authRequired: true })
+  return getQuery<IsLikedResponse>('/like/isLiked', { video_id: videoId }, { authRequired: true })
 }
 
 export function listMyLikedVideos() {
-  return postJson<Video[]>('/like/listMyLikedVideos', {}, { authRequired: true })
+  return getQuery<Video[]>('/like/listMyLikedVideos', undefined, { authRequired: true })
 }

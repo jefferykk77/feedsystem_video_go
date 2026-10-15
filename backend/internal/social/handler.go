@@ -71,7 +71,7 @@ func (h *SocialHandler) Unfollow(c *gin.Context) {
 
 func (h *SocialHandler) GetAllFollowers(c *gin.Context) {
 	var req GetAllFollowersRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(apierror.ClassifyHTTPStatus(err), gin.H{"error": err.Error()})
 		return
 	}
@@ -100,7 +100,7 @@ func (h *SocialHandler) GetAllFollowers(c *gin.Context) {
 
 func (h *SocialHandler) GetAllVloggers(c *gin.Context) {
 	var req GetAllVloggersRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(apierror.ClassifyHTTPStatus(err), gin.H{"error": err.Error()})
 		return
 	}

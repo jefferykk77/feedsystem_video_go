@@ -20,8 +20,8 @@ type FeedVideoItem struct {
 }
 
 type ListLatestRequest struct {
-	Limit      int   `json:"limit"`
-	LatestTime int64 `json:"latest_time"`
+	Limit      int   `json:"limit" form:"limit"`
+	LatestTime int64 `json:"latest_time" form:"latest_time"`
 }
 
 type ListLatestResponse struct {
@@ -31,9 +31,9 @@ type ListLatestResponse struct {
 }
 
 type ListLikesCountRequest struct {
-	Limit            int    `json:"limit"`
-	LikesCountBefore *int64 `json:"likes_count_before,omitempty"`
-	IDBefore         *uint  `json:"id_before,omitempty"`
+	Limit            int    `json:"limit" form:"limit"`
+	LikesCountBefore *int64 `json:"likes_count_before,omitempty" form:"likes_count_before"`
+	IDBefore         *uint  `json:"id_before,omitempty" form:"id_before"`
 }
 
 type LikesCountCursor struct {
@@ -49,8 +49,8 @@ type ListLikesCountResponse struct {
 }
 
 type ListByFollowingRequest struct {
-	Limit      int   `json:"limit"`
-	LatestTime int64 `json:"latest_time"`
+	Limit      int   `json:"limit" form:"limit"`
+	LatestTime int64 `json:"latest_time" form:"latest_time"`
 }
 
 type ListByFollowingResponse struct {
@@ -60,14 +60,14 @@ type ListByFollowingResponse struct {
 }
 
 type ListByPopularityRequest struct {
-	Limit          int   `json:"limit"`
-	AsOf           int64 `json:"as_of"`  // 服务器返回的分钟时间戳；第一页传0
-	Offset         int   `json:"offset"` // 下一页从这里开始；第一页传0
-	LatestIDBefore *uint `json:"latest_id_before,omitempty"`
+	Limit          int   `json:"limit" form:"limit"`
+	AsOf           int64 `json:"as_of" form:"as_of"`   // 服务器返回的分钟时间戳；第一页传0
+	Offset         int   `json:"offset" form:"offset"` // 下一页从这里开始；第一页传0
+	LatestIDBefore *uint `json:"latest_id_before,omitempty" form:"latest_id_before"`
 
 	// DB fallback 用（可选）
-	LatestPopularity int64     `json:"latest_popularity"`
-	LatestBefore     time.Time `json:"latest_before"`
+	LatestPopularity int64     `json:"latest_popularity" form:"latest_popularity"`
+	LatestBefore     time.Time `json:"latest_before" form:"latest_before" time_format:"2006-01-02T15:04:05Z07:00"`
 }
 
 type ListByPopularityResponse struct {

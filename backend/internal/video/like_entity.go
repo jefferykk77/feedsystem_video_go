@@ -10,5 +10,5 @@ type Like struct {
 }
 
 type LikeRequest struct {
-	VideoID uint `json:"video_id"`
+	VideoID uint `json:"video_id" form:"video_id"`
 }

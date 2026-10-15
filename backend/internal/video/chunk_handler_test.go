@@ -58,6 +58,18 @@ func setupTestEnv(t *testing.T) (*ChunkUploadHandler, func()) {
 	return handler, cleanup
 }
 
+func newQueryContext(t *testing.T, rawURL string) (*gin.Context, *httptest.ResponseRecorder) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, rawURL, nil)
+	req.Host = "localhost"
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = req
+	c.Set("accountID", testAccountID)
+	return c, rec
+}
+
 func newJSONContext(t *testing.T, path string, body interface{}) (*gin.Context, *httptest.ResponseRecorder) {
 	t.Helper()
 	b, err := json.Marshal(body)
@@ -401,7 +413,7 @@ func TestChunkStatus(t *testing.T) {
 
 	assertStatus := func(wantCount int) {
 		t.Helper()
-		c, rec := newJSONContext(t, "/video/chunk/status", ChunkStatusRequest{UploadID: uploadID})
+		c, rec := newQueryContext(t, "/video/chunk/status?upload_id="+uploadID)
 		h.ChunkStatus(c)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status: expected 200, got %d", rec.Code)

@@ -46,6 +46,47 @@ async function tryRefresh(): Promise<string | null> {
   return refreshPromise
 }
 
+export async function getQuery<T>(
+  path: string,
+  query?: Record<string, string | number | boolean | null | undefined>,
+  options?: { authRequired?: boolean },
+): Promise<T> {
+  const auth = useAuthStore()
+  const token = auth.token
+
+  if (options?.authRequired && !token) {
+    throw new ApiError('需要先登录（缺少 token）', 401)
+  }
+
+  const headers: Record<string, string> = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  const url = withQuery(path, query)
+  const res = await fetch(url, { method: 'GET', headers })
+
+  if (res.status === 401 && path !== '/account/refresh') {
+    const newToken = await tryRefresh()
+    if (newToken) {
+      headers.Authorization = `Bearer ${newToken}`
+      const retryRes = await fetch(url, { method: 'GET', headers })
+      return handleResponse<T>(retryRes, path)
+    }
+  }
+
+  return handleResponse<T>(res, path)
+}
+
+function withQuery(path: string, query?: Record<string, string | number | boolean | null | undefined>) {
+  const params = new URLSearchParams()
+  if (query) {
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== null) params.set(key, String(value))
+    }
+  }
+  const qs = params.toString()
+  return `${API_BASE}${path}${qs ? `?${qs}` : ''}`
+}
+
 export async function postJson<T>(path: string, body: unknown, options?: { authRequired?: boolean }): Promise<T> {
   const auth = useAuthStore()
   const token = auth.token

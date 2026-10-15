@@ -21,5 +21,5 @@ type DeleteCommentRequest struct {
 }
 
 type GetAllCommentsRequest struct {
-	VideoID uint `json:"video_id"`
+	VideoID uint `json:"video_id" form:"video_id"`
 }

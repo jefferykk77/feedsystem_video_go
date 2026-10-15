@@ -27,11 +27,11 @@ type DeleteVideoRequest struct {
 }
 
 type ListByAuthorIDRequest struct {
-	AuthorID uint `json:"author_id"`
+	AuthorID uint `json:"author_id" form:"author_id"`
 }
 
 type GetDetailRequest struct {
-	ID uint `json:"id"`
+	ID uint `json:"id" form:"id"`
 }
 
 type UpdateLikesCountRequest struct {

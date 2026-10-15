@@ -73,7 +73,7 @@ func (lh *LikeHandler) Unlike(c *gin.Context) {
 
 func (lh *LikeHandler) IsLiked(c *gin.Context) {
 	var req LikeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(apierror.ClassifyHTTPStatus(err), gin.H{"error": err.Error()})
 		return
 	}

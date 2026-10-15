@@ -211,7 +211,7 @@ func (vh *VideoHandler) DeleteVideo(c *gin.Context) {
 
 func (vh *VideoHandler) ListByAuthorID(c *gin.Context) {
 	var req ListByAuthorIDRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(apierror.ClassifyHTTPStatus(err), gin.H{"error": err.Error()})
 		return
 	}
@@ -228,7 +228,7 @@ func (vh *VideoHandler) ListByAuthorID(c *gin.Context) {
 
 func (vh *VideoHandler) GetDetail(c *gin.Context) {
 	var req GetDetailRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(apierror.ClassifyHTTPStatus(err), gin.H{"error": err.Error()})
 		return
 	}

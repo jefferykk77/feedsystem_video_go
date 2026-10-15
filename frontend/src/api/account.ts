@@ -1,4 +1,4 @@
-import { postForm, postJson } from './client'
+import { getQuery, postForm, postJson } from './client'
 import type { Account, MessageResponse, TokenResponse } from './types'
 
 export function register(username: string, password: string) {
@@ -26,11 +26,11 @@ export function changePassword(username: string, oldPassword: string, newPasswor
 }
 
 export function findById(id: number) {
-  return postJson<Account>('/account/findByID', { id })
+  return getQuery<Account>('/account/findByID', { id })
 }
 
 export function findByUsername(username: string) {
-  return postJson<Account>('/account/findByUsername', { username })
+  return getQuery<Account>('/account/findByUsername', { username })
 }
 
 export function uploadAvatar(file: File) {

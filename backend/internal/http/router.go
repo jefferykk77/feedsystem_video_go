@@ -24,6 +24,7 @@ func SetRouter(db *gorm.DB, cache *rediscache.Client, rmq *rabbitmq.RabbitMQ) *g
 	if err := r.SetTrustedProxies(nil); err != nil {
 		log.Printf("SetTrustedProxies failed: %v", err)
 	}
+	r.Use(ratelimit.ServerRU())
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
@@ -45,8 +46,8 @@ func SetRouter(db *gorm.DB, cache *rediscache.Client, rmq *rabbitmq.RabbitMQ) *g
 		accountGroup.POST("/register", registerLimiter, accountHandler.CreateAccount)
 		accountGroup.POST("/login", loginLimiter, accountHandler.Login)
 		accountGroup.POST("/changePassword", accountHandler.ChangePassword)
-		accountGroup.POST("/findByID", accountHandler.FindByID)
-		accountGroup.POST("/findByUsername", accountHandler.FindByUsername)
+		accountGroup.GET("/findByID", accountHandler.FindByID)
+		accountGroup.GET("/findByUsername", accountHandler.FindByUsername)
 		accountGroup.POST("/refresh", accountHandler.Refresh)
 	}
 	protectedAccountGroup := accountGroup.Group("")
@@ -69,8 +70,8 @@ func SetRouter(db *gorm.DB, cache *rediscache.Client, rmq *rabbitmq.RabbitMQ) *g
 	chunkHandler := video.NewChunkUploadHandler(cache)
 	videoGroup := r.Group("/video")
 	{
-		videoGroup.POST("/listByAuthorID", videoHandler.ListByAuthorID)
-		videoGroup.POST("/getDetail", videoHandler.GetDetail)
+		videoGroup.GET("/listByAuthorID", videoHandler.ListByAuthorID)
+		videoGroup.GET("/getDetail", videoHandler.GetDetail)
 	}
 	protectedVideoGroup := videoGroup.Group("")
 	protectedVideoGroup.Use(jwt.JWTAuth(accountRepository, cache))
@@ -80,7 +81,7 @@ func SetRouter(db *gorm.DB, cache *rediscache.Client, rmq *rabbitmq.RabbitMQ) *g
 		protectedVideoGroup.POST("/publish", videoHandler.PublishVideo)
 		protectedVideoGroup.POST("/chunk/init", chunkHandler.InitChunkUpload)
 		protectedVideoGroup.POST("/chunk/upload", chunkHandler.UploadChunk)
-		protectedVideoGroup.POST("/chunk/status", chunkHandler.ChunkStatus)
+		protectedVideoGroup.GET("/chunk/status", chunkHandler.ChunkStatus)
 		protectedVideoGroup.POST("/chunk/complete", chunkHandler.CompleteChunkUpload)
 	}
 	// like
@@ -98,8 +99,8 @@ func SetRouter(db *gorm.DB, cache *rediscache.Client, rmq *rabbitmq.RabbitMQ) *g
 	{
 		protectedLikeGroup.POST("/like", likeLimiter, likeHandler.Like)
 		protectedLikeGroup.POST("/unlike", likeLimiter, likeHandler.Unlike)
-		protectedLikeGroup.POST("/isLiked", likeHandler.IsLiked)
-		protectedLikeGroup.POST("/listMyLikedVideos", likeHandler.ListMyLikedVideos)
+		protectedLikeGroup.GET("/isLiked", likeHandler.IsLiked)
+		protectedLikeGroup.GET("/listMyLikedVideos", likeHandler.ListMyLikedVideos)
 	}
 	// comment
 	commentRepository := video.NewCommentRepository(db)
@@ -112,7 +113,7 @@ func SetRouter(db *gorm.DB, cache *rediscache.Client, rmq *rabbitmq.RabbitMQ) *g
 	commentHandler := video.NewCommentHandler(commentService, accountService)
 	commentGroup := r.Group("/comment")
 	{
-		commentGroup.POST("/listAll", commentHandler.GetAllComments)
+		commentGroup.GET("/listAll", commentHandler.GetAllComments)
 	}
 	protectedCommentGroup := commentGroup.Group("")
 	protectedCommentGroup.Use(jwt.JWTAuth(accountRepository, cache))
@@ -135,14 +136,14 @@ func SetRouter(db *gorm.DB, cache *rediscache.Client, rmq *rabbitmq.RabbitMQ) *g
 	{
 		protectedSocialGroup.POST("/follow", socialLimiter, socialHandler.Follow)
 		protectedSocialGroup.POST("/unfollow", socialLimiter, socialHandler.Unfollow)
-		protectedSocialGroup.POST("/getAllFollowers", socialHandler.GetAllFollowers)
-		protectedSocialGroup.POST("/getAllVloggers", socialHandler.GetAllVloggers)
-		protectedSocialGroup.POST("/getCounts", socialHandler.GetCounts)
+		protectedSocialGroup.GET("/getAllFollowers", socialHandler.GetAllFollowers)
+		protectedSocialGroup.GET("/getAllVloggers", socialHandler.GetAllVloggers)
+		protectedSocialGroup.GET("/getCounts", socialHandler.GetCounts)
 	}
 
-	accountGroup.POST("/getProfile", func(c *gin.Context) {
+	accountGroup.GET("/getProfile", func(c *gin.Context) {
 		var req account.GetProfileRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
+		if err := c.ShouldBindQuery(&req); err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
 		}
@@ -173,15 +174,15 @@ func SetRouter(db *gorm.DB, cache *rediscache.Client, rmq *rabbitmq.RabbitMQ) *g
 	feedGroup := r.Group("/feed")
 	feedGroup.Use(jwt.SoftJWTAuth(accountRepository, cache))
 	{
-		feedGroup.POST("/listLatest", feedHandler.ListLatest)
-		feedGroup.POST("/listLikesCount", feedHandler.ListLikesCount)
-		feedGroup.POST("/listByPopularity", feedHandler.ListByPopularity)
-		feedGroup.POST("/listByTag", feedHandler.ListByTag)
+		feedGroup.GET("/listLatest", feedHandler.ListLatest)
+		feedGroup.GET("/listLikesCount", feedHandler.ListLikesCount)
+		feedGroup.GET("/listByPopularity", feedHandler.ListByPopularity)
+		feedGroup.GET("/listByTag", feedHandler.ListByTag)
 	}
 	protectedFeedGroup := feedGroup.Group("")
 	protectedFeedGroup.Use(jwt.JWTAuth(accountRepository, cache))
 	{
-		protectedFeedGroup.POST("/listByFollowing", feedHandler.ListByFollowing)
+		protectedFeedGroup.GET("/listByFollowing", feedHandler.ListByFollowing)
 	}
 	// message
 	messageRepo := message.NewRepository(db)
@@ -192,7 +193,7 @@ func SetRouter(db *gorm.DB, cache *rediscache.Client, rmq *rabbitmq.RabbitMQ) *g
 	protectedMessageGroup.Use(jwt.JWTAuth(accountRepository, cache))
 	{
 		protectedMessageGroup.POST("/send", messageHandler.Send)
-		protectedMessageGroup.POST("/list", messageHandler.List)
+		protectedMessageGroup.GET("/list", messageHandler.List)
 	}
 	//worker
 	timelineMQ, err := rabbitmq.NewTimelineMQ(rmq)

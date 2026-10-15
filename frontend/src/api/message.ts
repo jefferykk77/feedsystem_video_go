@@ -1,4 +1,4 @@
-import { postJson } from './client'
+import { getQuery, postJson } from './client'
 import type { DirectMessage, ListMessagesResponse } from './types'
 
 export function sendMessage(toId: number, content: string) {
@@ -6,5 +6,5 @@ export function sendMessage(toId: number, content: string) {
 }
 
 export function listMessages(peerId: number) {
-  return postJson<ListMessagesResponse>('/message/list', { peer_id: peerId }, { authRequired: true })
+  return getQuery<ListMessagesResponse>('/message/list', { peer_id: peerId }, { authRequired: true })
 }

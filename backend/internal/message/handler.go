@@ -75,7 +75,7 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 	var req ListRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

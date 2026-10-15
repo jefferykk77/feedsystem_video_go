@@ -17,7 +17,7 @@ type SendRequest struct {
 }
 
 type ListRequest struct {
-	PeerID uint `json:"peer_id"`
+	PeerID uint `json:"peer_id" form:"peer_id"`
 }
 
 type ListResponse struct {
