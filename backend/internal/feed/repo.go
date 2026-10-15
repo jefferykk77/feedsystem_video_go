@@ -17,11 +17,16 @@ func NewFeedRepository(db *gorm.DB) *FeedRepository {
 	return &FeedRepository{db: db}
 }
 
-func (repo *FeedRepository) ListLatest(ctx context.Context, limit int, latestBefore time.Time) ([]*video.Video, error) {
+func (repo *FeedRepository) ListLatest(ctx context.Context, limit int, latestBefore time.Time, idBefore uint) ([]*video.Video, error) {
 	var videos []*video.Video
 	query := repo.db.WithContext(ctx).Model(&video.Video{}).
-		Order("create_time DESC")
-	if !latestBefore.IsZero() {
+		Order("create_time DESC, id DESC")
+	if !latestBefore.IsZero() && idBefore > 0 {
+		query = query.Where(
+			"(create_time < ?) OR (create_time = ? AND id < ?)",
+			latestBefore, latestBefore, idBefore,
+		)
+	} else if !latestBefore.IsZero() {
 		query = query.Where("create_time < ?", latestBefore)
 	}
 	if err := query.Limit(limit).Find(&videos).Error; err != nil {
