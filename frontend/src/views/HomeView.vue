@@ -19,7 +19,7 @@ const auth = useAuthStore()
 const social = useSocialStore()
 const toast = useToastStore()
 
-const { tab, following, currentState, loadFollowing, ensureTabLoaded, loadMoreIfNeeded } = useVideoFeed()
+const { tab, following, currentState, loadFollowing, ensureTabLoaded, loadMoreIfNeeded, noteRecommendLike } = useVideoFeed()
 const scroller = ref<HTMLDivElement | null>(null)
 const { muted, activeIndex, videoMap, setVideoRef, scrollToIndex, onScroll, playActive, toggleMute, togglePlayPause } = useVideoPlayer(scroller)
 
@@ -29,6 +29,12 @@ async function needLogin() {
 }
 
 const { likeBusy, followBusy, toggleLike, toggleFollow, share } = useLikeFollow(needLogin)
+
+async function onToggleLike(item: FeedVideoItem) {
+  const wasLiked = item.is_liked
+  await toggleLike(item)
+  if (item.is_liked !== wasLiked) noteRecommendLike(item.id, item.is_liked)
+}
 
 const drawerVideo = ref<FeedVideoItem | null>(null)
 const drawerOpen = ref(false)
@@ -43,11 +49,6 @@ const filteredItems = computed(() => {
   return items.filter((v) => v.title.toLowerCase().includes(q.value) || v.author.username.toLowerCase().includes(q.value))
 })
 const activeItem = computed(() => filteredItems.value[activeIndex.value] ?? null)
-const visibleRange = computed(() => {
-  const idx = activeIndex.value
-  const len = filteredItems.value.length
-  return { start: Math.max(0, idx - 1), end: Math.min(len - 1, idx + 1) }
-})
 const myAccountId = computed(() => auth.claims?.account_id ?? 0)
 
 watch(activeItem, async () => {
@@ -107,6 +108,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     <div class="page">
       <div class="tabs">
         <button class="tab" :class="{ on: tab === 'recommend' }" type="button" @click="tab = 'recommend'">推荐</button>
+        <button class="tab" :class="{ on: tab === 'latest' }" type="button" @click="tab = 'latest'">最新</button>
         <button class="tab" :class="{ on: tab === 'following' }" type="button" @click="tab = 'following'">关注</button>
         <button class="tab" :class="{ on: tab === 'hot' }" type="button" @click="tab = 'hot'">点赞榜</button>
         <div class="tabs-right">
@@ -123,11 +125,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         <section
           v-for="(item, idx) in filteredItems"
           :key="`${tab}-${item.id}`"
-          v-show="idx >= visibleRange.start && idx <= visibleRange.end"
           class="slide"
           :class="{ active: idx === activeIndex }"
         >
-          <div class="stage" @click="togglePlayPause(activeItem?.id)" @dblclick.prevent="toggleLike(item)">
+          <div class="stage" @click="togglePlayPause(activeItem?.id)" @dblclick.prevent="onToggleLike(item)">
             <video
               class="video"
               :ref="(el) => setVideoRef(item.id, el as HTMLVideoElement | null)"
@@ -145,7 +146,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               <div v-if="item.description" class="desc">{{ item.description }}</div>
             </div>
             <div class="actions">
-              <button class="act" type="button" :disabled="!!likeBusy[String(item.id)]" @click.stop="toggleLike(item)">
+              <button class="act" type="button" :disabled="!!likeBusy[String(item.id)]" @click.stop="onToggleLike(item)">
                 <span class="icon" :class="{ liked: item.is_liked }">♥</span>
                 <span class="count">{{ item.likes_count }}</span>
               </button>

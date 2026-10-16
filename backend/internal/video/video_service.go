@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -15,15 +16,26 @@ import (
 	"gorm.io/gorm"
 )
 
+type TagIndexer interface {
+	IndexVideoTags(ctx context.Context, videoID uint, tags []string) error
+}
+
 type VideoService struct {
 	repo         *VideoRepository
 	cache        *rediscache.Client
 	cacheTTL     time.Duration
 	popularityMQ *rabbitmq.PopularityMQ
+	tagIndexer   TagIndexer
 }
 
 func NewVideoService(repo *VideoRepository, cache *rediscache.Client, popularityMQ *rabbitmq.PopularityMQ) *VideoService {
 	return &VideoService{repo: repo, cache: cache, cacheTTL: 5 * time.Minute, popularityMQ: popularityMQ}
+}
+
+func (vs *VideoService) SetTagIndexer(indexer TagIndexer) {
+	if vs != nil {
+		vs.tagIndexer = indexer
+	}
 }
 
 func (vs *VideoService) Publish(ctx context.Context, video *Video) error {
@@ -43,6 +55,7 @@ func (vs *VideoService) Publish(ctx context.Context, video *Video) error {
 	if video.CoverURL == "" {
 		return errors.New("cover url is required")
 	}
+	tags := ChineseTags(ExtractTags(video.Title + " " + video.Description))
 
 	//事务保证视频写入库和消息写入本地消息表的一致性
 	err := vs.repo.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -61,7 +74,6 @@ func (vs *VideoService) Publish(ctx context.Context, video *Video) error {
 			return err
 		}
 
-		tags := ExtractTags(video.Title + " " + video.Description)
 		for _, tagName := range tags {
 			var tag Tag
 			if err := tx.Where("name = ?", tagName).FirstOrCreate(&tag, Tag{Name: tagName}).Error; err != nil {
@@ -73,8 +85,20 @@ func (vs *VideoService) Publish(ctx context.Context, video *Video) error {
 		}
 		return nil
 	})
-	return err
-
+	if err != nil {
+		return err
+	}
+	if vs.tagIndexer != nil && len(tags) > 0 {
+		videoID := video.ID
+		go func() {
+			indexCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if indexErr := vs.tagIndexer.IndexVideoTags(indexCtx, videoID, tags); indexErr != nil {
+				log.Printf("index video %d tags: %v", videoID, indexErr)
+			}
+		}()
+	}
+	return nil
 }
 
 func (vs *VideoService) Delete(ctx context.Context, id uint, authorID uint) error {

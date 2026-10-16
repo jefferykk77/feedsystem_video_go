@@ -60,6 +60,14 @@ export type FeedVideoItem = {
   is_liked: boolean
 }
 
+export type ListRecommendResponse = {
+  video_list: FeedVideoItem[]
+  source: 'vector' | 'following' | 'hot'
+  next_offset: number
+  next_time: number
+  has_more: boolean
+}
+
 export type ListLatestResponse = {
   video_list: FeedVideoItem[]
   next_time: number

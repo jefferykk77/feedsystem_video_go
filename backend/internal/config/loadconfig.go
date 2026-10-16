@@ -14,6 +14,9 @@ type Config struct {
 	Database            DatabaseConfig      `yaml:"database"`
 	Redis               RedisConfig         `yaml:"redis"`
 	RabbitMQ            RabbitMQConfig      `yaml:"rabbitmq"`
+	Milvus              MilvusConfig        `yaml:"milvus"`
+	Embed               EmbedConfig         `yaml:"embed"`
+	Gemini              GeminiConfig        `yaml:"gemini"`
 	ObservabilityConfig ObservabilityConfig `yaml:"observability"`
 }
 
@@ -41,6 +44,20 @@ type RabbitMQConfig struct {
 	Port     int    `yaml:"port"`
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
+}
+
+type MilvusConfig struct {
+	Address string `yaml:"address"`
+}
+
+type EmbedConfig struct {
+	URL string `yaml:"url"`
+}
+
+type GeminiConfig struct {
+	APIKey    string `yaml:"api_key"`
+	Model     string `yaml:"model"`
+	Dimension int    `yaml:"dimension"`
 }
 
 type ObservabilityConfig struct {
@@ -125,6 +142,27 @@ func ApplyEnvOverrides(cfg *Config) {
 	}
 	if v := os.Getenv("RABBITMQ_PASS"); v != "" {
 		cfg.RabbitMQ.Password = v
+	}
+	if v := os.Getenv("MILVUS_ADDRESS"); v != "" {
+		cfg.Milvus.Address = v
+	}
+	if v := os.Getenv("GEMINI_API_KEY"); v != "" {
+		cfg.Gemini.APIKey = v
+	}
+	if v := os.Getenv("GEMINI_EMBEDDING_MODEL"); v != "" {
+		cfg.Gemini.Model = v
+	}
+	if v := os.Getenv("EMBED_URL"); v != "" {
+		cfg.Embed.URL = v
+	}
+	if cfg.Milvus.Address == "" {
+		cfg.Milvus.Address = "localhost:19530"
+	}
+	if cfg.Gemini.Model == "" {
+		cfg.Gemini.Model = "gemini-embedding-001"
+	}
+	if cfg.Gemini.Dimension <= 0 {
+		cfg.Gemini.Dimension = 768
 	}
 }
 

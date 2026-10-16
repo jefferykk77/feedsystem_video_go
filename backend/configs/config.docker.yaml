@@ -20,6 +20,16 @@ rabbitmq:
   username: admin
   password: password123
 
+milvus:
+  address: milvus:19530
+
+embed:
+  url: http://embed:8000
+
+gemini:
+  model: gemini-embedding-001
+  dimension: 768
+
 observability:
   pprof:
     enabled: false

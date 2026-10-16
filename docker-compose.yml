@@ -36,6 +36,33 @@ services:
       timeout: 3s
       retries: 20
 
+  embed:
+    build:
+      context: ./embed
+    restart: always
+    ports:
+      - "8000:8000"
+
+  milvus:
+    image: milvusdb/milvus:v2.5.14
+    container_name: milvus1
+    restart: always
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_USE_EMBED: "true"
+      COMMON_STORAGETYPE: local
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    volumes:
+      - milvus_data:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 20s
+      start_period: 90s
+      timeout: 10s
+      retries: 10
+
   rabbitmq:
     image: rabbitmq:3-management
     restart: always
@@ -67,6 +94,9 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-123456}
       RABBITMQ_USER: ${RABBITMQ_USER:-admin}
       RABBITMQ_PASS: ${RABBITMQ_PASS:-password123}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      MILVUS_ADDRESS: milvus:19530
+      EMBED_URL: http://embed:8000
     ports:
       - "8080:8080"
     volumes:
@@ -79,6 +109,10 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      milvus:
+        condition: service_started
+      embed:
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1"]
       interval: 10s
@@ -133,4 +167,5 @@ volumes:
   mysql_data:
   redis_data:
   rabbitmq_data:
+  milvus_data:
   backend_uploads:

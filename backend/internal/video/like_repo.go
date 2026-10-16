@@ -51,6 +51,24 @@ func (r *LikeRepository) DeleteByVideoAndAccount(ctx context.Context, videoID, a
 	return res.RowsAffected > 0, res.Error
 }
 
+func (r *LikeRepository) LatestLiked(ctx context.Context, accountID uint) (*Like, error) {
+	if accountID == 0 {
+		return nil, nil
+	}
+	var like Like
+	err := r.db.WithContext(ctx).
+		Where("account_id = ?", accountID).
+		Order("created_at desc").
+		First(&like).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &like, nil
+}
+
 func (r *LikeRepository) IsLiked(ctx context.Context, videoID, accountID uint) (bool, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&Like{}).

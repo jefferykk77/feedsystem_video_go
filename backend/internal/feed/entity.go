@@ -72,6 +72,21 @@ type ListByPopularityRequest struct {
 	LatestBefore     time.Time `json:"latest_before" form:"latest_before" time_format:"2006-01-02T15:04:05Z07:00"`
 }
 
+type ListRecommendRequest struct {
+	Source     string `json:"source" form:"source"`
+	Offset     int    `json:"offset" form:"offset"`
+	LatestTime int64  `json:"latest_time" form:"latest_time"`
+	Exclude    string `json:"exclude" form:"exclude"`
+}
+
+type ListRecommendResponse struct {
+	VideoList  []FeedVideoItem `json:"video_list"`
+	Source     string          `json:"source"`
+	NextOffset int             `json:"next_offset"`
+	NextTime   int64           `json:"next_time"`
+	HasMore    bool            `json:"has_more"`
+}
+
 type ListByPopularityResponse struct {
 	VideoList  []FeedVideoItem `json:"video_list"`
 	AsOf       int64           `json:"as_of"`

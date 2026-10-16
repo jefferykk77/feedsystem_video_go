@@ -183,6 +183,21 @@ func nonNilFeedVideoItems(items []FeedVideoItem) []FeedVideoItem {
 	return items
 }
 
+func (h *FeedHandler) ListRecommend(c *gin.Context) {
+	var req ListRecommendRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	viewerAccountID, _ := jwt.GetAccountID(c)
+	resp, err := h.service.ListRecommend(c.Request.Context(), req.Source, req.Offset, req.LatestTime, viewerAccountID, parseExcludeIDs(req.Exclude))
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, resp)
+}
+
 func (h *FeedHandler) ListByTag(c *gin.Context) {
 	var req struct {
 		TagName string `json:"tag_name" form:"tag_name"`

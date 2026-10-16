@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.7
 #
 # Multi-stage build for backend API and worker.
 #
@@ -7,7 +6,7 @@
 #   docker build -f backend/Dockerfile -t feedsystem-backend:worker --target worker .
 #
 
-ARG GO_VERSION=1.24.5
+ARG GO_VERSION=1.24.6
 ARG GOPROXY=https://goproxy.cn,direct
 ARG GOSUMDB=sum.golang.google.cn
 

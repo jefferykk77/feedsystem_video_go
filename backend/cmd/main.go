@@ -8,6 +8,7 @@ import (
 	rabbitmq "feedsystem_video_go/internal/middleware/rabbitmq"
 	rediscache "feedsystem_video_go/internal/middleware/redis"
 	"feedsystem_video_go/internal/observability"
+	"feedsystem_video_go/internal/recommend"
 	"log"
 	"os"
 	"strconv"
@@ -89,8 +90,11 @@ func main() {
 		defer pprofServer.Close()
 	}
 
+	// 推荐流的标签向量。Milvus 还没就绪时，推荐流先用热榜和关注流。
+	tagStore := recommend.Start(cfg, sqlDB)
+
 	// 设置路由
-	r := apphttp.SetRouter(sqlDB, cache, rmq)
+	r := apphttp.SetRouter(sqlDB, cache, rmq, tagStore)
 	log.Printf("Server is running on port %d", cfg.Server.Port)
 	if err := r.Run(":" + strconv.Itoa(cfg.Server.Port)); err != nil {
 		log.Fatalf("Failed to run server: %v", err)

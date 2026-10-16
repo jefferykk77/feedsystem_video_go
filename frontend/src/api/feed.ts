@@ -1,6 +1,15 @@
 import { getQuery } from './client'
 import { normalizeFeedVideoList } from './normalize'
-import type { ListByFollowingResponse, ListByPopularityResponse, ListLatestResponse, ListLikesCountResponse } from './types'
+import type { ListByFollowingResponse, ListByPopularityResponse, ListLatestResponse, ListLikesCountResponse, ListRecommendResponse } from './types'
+
+export async function listRecommend(input: { source: 'vector' | 'following' | 'hot'; offset?: number; latest_time?: number; exclude?: string }) {
+  const query: Record<string, string | number | undefined> = { source: input.source }
+  if (typeof input.offset === 'number') query.offset = input.offset
+  if (typeof input.latest_time === 'number' && input.latest_time > 0) query.latest_time = input.latest_time
+  if (input.exclude) query.exclude = input.exclude
+  const res = await getQuery<ListRecommendResponse>('/feed/listRecommend', query)
+  return { ...res, video_list: normalizeFeedVideoList(res.video_list) }
+}
 
 export async function listLatest(input: { limit: number; latest_time: number }) {
   const res = await getQuery<ListLatestResponse>('/feed/listLatest', input)

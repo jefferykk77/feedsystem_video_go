@@ -107,6 +107,17 @@ func (repo *FeedRepository) GetByIDs(ctx context.Context, ids []uint) ([]*video.
 	return videos, nil
 }
 
+func (repo *FeedRepository) ListTagNames(ctx context.Context, videoID uint) ([]string, error) {
+	var names []string
+	err := repo.db.WithContext(ctx).
+		Table("tags").
+		Select("tags.name").
+		Joins("JOIN video_tags ON video_tags.tag_id = tags.id").
+		Where("video_tags.video_id = ?", videoID).
+		Scan(&names).Error
+	return names, err
+}
+
 func (repo *FeedRepository) ListByTag(ctx context.Context, tagName string, limit int) ([]*video.Video, error) {
 	var videos []*video.Video
 	err := repo.db.WithContext(ctx).Model(&video.Video{}).Table("videos").

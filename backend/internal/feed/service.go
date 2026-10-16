@@ -23,6 +23,7 @@ type FeedService struct {
 	localcache   *cache.Cache
 	cacheTTL     time.Duration
 	requestGroup singleflight.Group
+	tagSearcher  TagSearcher
 }
 
 type CachedFeedData struct {
@@ -33,6 +34,12 @@ const popularitySnapshotTTL = 30 * time.Minute
 
 func NewFeedService(repo *FeedRepository, likeRepo *video.LikeRepository, rediscache *rediscache.Client) *FeedService {
 	return &FeedService{repo: repo, likeRepo: likeRepo, rediscache: rediscache, localcache: cache.New(3*time.Second, 5*time.Second), cacheTTL: 24 * time.Hour}
+}
+
+func (f *FeedService) SetTagSearcher(searcher TagSearcher) {
+	if f != nil {
+		f.tagSearcher = searcher
+	}
 }
 
 func (f *FeedService) GetVideoByIDs(ctx context.Context, videoIDs []uint) ([]*video.Video, error) {

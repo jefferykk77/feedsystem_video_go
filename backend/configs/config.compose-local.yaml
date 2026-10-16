@@ -20,6 +20,13 @@ rabbitmq:
   username: admin
   password: password123
 
+milvus:
+  address: localhost:19530
+
+gemini:
+  model: gemini-embedding-001
+  dimension: 768
+
 observability:
   pprof:
     enabled: true
